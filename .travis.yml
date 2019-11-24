@@ -1,0 +1,59 @@
+language: c
+sudo: required
+install:
+  - |
+    if [[ "${TRAVIS_OS_NAME}" == "linux" ]]; then
+      CMAKE_URL="http://www.cmake.org/files/v3.12/cmake-3.12.3-Linux-x86_64.tar.gz"
+      mkdir -p "${HOME}/programs"
+      pushd "${HOME}/programs"
+      mkdir cmake && travis_retry wget -O - ${CMAKE_URL} | tar --strip-components=1 -xz -C cmake
+      popd
+    else
+      brew install cmake
+    fi
+env:
+  - PATH=${HOME}/programs/cmake/bin:${PATH}
+before_script:
+  - cmake --version
+  - sudo apt-get update -qq --allow-unauthenticated
+  - sudo apt-get install cpanminus nsis
+# Standard Dist::Zilla, this will install a bunch of prereqs, speeding up the upgrade
+  - sudo apt-get install libdist-zilla-perl
+# Upgrade Dist::Zilla, Path::Tiny (I dislike its github issue 144 -;)
+# - sudo cpanm --notest Dist::Zilla Path::Tiny
+  - sudo cpanm --notest Path::Tiny
+# This is not in the prereqs it seems, but the latest MooseX::Role::Parameterized is highly recommended -; let's do it for Moo and Moose as well
+  - sudo cpanm --notest Moo Moose MooseX::Role::Parameterized
+# For my scripts, prefered over dzil --listdeps that is too long
+  - sudo cpanm --notest Archive::Tar Class::Tiny Config::AutoConf::INI ExtUtils::CBuilder ExtUtils::CppGuess ExtUtils::MakeMaker File::Basename File::chdir File::Copy File::Copy::Recursive File::Find File::Path File::Spec File::Temp IPC::Open3 IPC::Run Params::Validate Perl::OSType Role::Tiny Scalar::Util Test::More Test::More::UTF8 Log::Log4perl Log::Any Log::Any::Adapter Log::Any::Adapter::Log4perl Test::EOL Test::Kwalitee Test::NoTabs Test::Pod::Coverage namespace::autoclean JSON::MaybeXS
+  - sudo cpanm --notest Dist::Zilla::PluginBundle::RJBS
+  - pushd src/bindings/perl && dzil authordeps --missing | xargs sudo cpanm --notest && popd
+# Dependencies
+  - sh ./install-c-genericLogger.sh
+  - sh ./install-c-genericStack.sh
+  - sh ./install-c-genericHash.sh
+  - sh ./install-c-genericSparseArray.sh
+  - sh ./install-c-marpaWrapper.sh
+  - sh ./install-c-tconv.sh
+  - sh ./install-c-luaunpanic.sh
+script:
+# We want to try perl standalone first
+  - cmake --version
+  - perl CMakeObjects.PL
+  - rm -rf output
+# ALL_IN_ONE
+  - cmake --version
+  - cmake . -DALL_IN_ONE=ON
+  - make check VERBOSE=1
+  - make pack VERBOSE=1
+  - cpack -G NSIS
+  - make install DESTDIR=/tmp VERBOSE=1
+  - rm -rf output CMakeCache.txt CMakeFiles pcre2
+# Not ALL_IN_ONE
+  - cmake --version
+  - cmake .
+  - make VERBOSE=1
+  - make check VERBOSE=1
+  - make pack VERBOSE=1
+  - cpack -G NSIS
+  - sudo make install VERBOSE=1
