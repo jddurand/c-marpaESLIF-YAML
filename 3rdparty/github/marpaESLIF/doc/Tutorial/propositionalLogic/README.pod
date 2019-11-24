@@ -1,0 +1,275 @@
+=encoding UTF-8
+
+=head1 NAME
+
+marpaESLIF_PROPOSITIONALLOGIC - Extended Marpa's Scanless Interface Propositional Logic Tutorial
+
+=head1 DESCRIPTION
+
+marpaESLIF is a Scanless Interface expressed in a BNF format, that is using L<marpaWrapper|https://github.com/jddurand/c-marpaWrapper>, itself being a thin interface on top of L<libmarpa|https://jeffreykegler.github.io/Marpa-web-site/libmarpa.html> parser.
+
+This documentation is giving a tutorial using propositional logic and an external lexing.
+
+Some tutorials on propositional logic can be found on the web, for example L<this lecture|http://pages.cs.wisc.edu/~jerryzhu/cs540/handouts/pl.pdf>.
+
+=head2 GRAMMAR
+
+The BNF for propositional logic is:
+
+    :default ::= action => ::shift
+
+    Sentence        ::= SYMBOL
+                      | LPAREN Sentence RPAREN              assoc => group action => ::copy[1]
+                     || NOT Sentence                                       action => action_not
+                     ||        Sentence        AND Sentence                action => action_and
+                     ||        Sentence         OR Sentence                action => action_or
+                     ||        Sentence    IMPLIES Sentence                action => action_implies
+                      |        Sentence EQUIVALENT Sentence                action => action_equivalent
+
+    _DUMMY      ~ [^\s\S]
+    LPAREN      ~ _DUMMY
+    RPAREN      ~ _DUMMY
+    NOT         ~ _DUMMY
+    AND         ~ _DUMMY
+    OR          ~ _DUMMY
+    IMPLIES     ~ _DUMMY
+    EQUIVALENT  ~ _DUMMY
+    SYMBOL      ~ _DUMMY
+
+=head2 Goal
+
+We will test the propositional logic table on the sentence
+
+  (P AND R IMPLIES Q) AND P AND R AND NOT Q
+
+that always returns a I<false> value, regardless if C<P>, C<Q> or C<R> are true or false.
+
+=head2 A totally externalized lexing
+
+You saw from the grammar that we arrange it to never match any input since all lexemes are defined to be derivations of the
+
+  _DUMMY ~ [^\s\S]
+
+sentence in the lexing sub-grammar.
+
+Indeed, this will because we will inject everything by hand using I<alternatives>. The following macros are doing this:
+
+=over
+
+=item Context is any value not C<NULL>
+
+  static char myContext;
+  #define MY_CONTEXT &myContext
+
+=item Lexemes that are not of interest for valuation
+
+We will inject an UNDEF value on the stack for the keywords C<AND>, C<OR>, C<IMPLIES> and C<EQUIVALENT>:
+
+#define DO_ALTERNATIVE_UNDEF(names) do {                                \
+    marpaESLIFAlternative_t  marpaESLIFAlternative;                     \
+                                                                        \
+    marpaESLIFAlternative.lexemes        = names;                       \
+    marpaESLIFAlternative.value.type     = MARPAESLIF_VALUE_TYPE_UNDEF; \
+    marpaESLIFAlternative.value.contextp = MY_CONTEXT;                  \
+    marpaESLIFAlternative.grammarLengthl = 1;                           \
+                                                                        \
+    GENERICLOGGER_DEBUGF(genericLoggerp, "Injecting <%s>", names);      \
+    if (! marpaESLIFRecognizer_lexeme_readb(marpaESLIFRecognizerp, &marpaESLIFAlternative, 0)) { \
+      GENERICLOGGER_ERRORF(genericLoggerp, "Failure to set <%s> alternative", names); \
+      marpaESLIFRecognizer_progressLogb(marpaESLIFRecognizerp, -1, -1, GENERICLOGGER_LOGLEVEL_ERROR); \
+      goto err;                                                         \
+    }                                                                   \
+  } while (0)
+
+=item Lexemes that are of interest for valuation
+
+We insert booleans, expressed using the SHORT value type, for the keywords C<P>, C<Q> and C<R>:
+
+#define DO_ALTERNATIVE_CHAR(names, boolval) do {                        \
+    marpaESLIFAlternative_t  marpaESLIFAlternative;                     \
+                                                                        \
+    marpaESLIFAlternative.lexemes        = names;                       \
+    marpaESLIFAlternative.value.type     = MARPAESLIF_VALUE_TYPE_CHAR;  \
+    marpaESLIFAlternative.value.u.c      = boolval;                     \
+    marpaESLIFAlternative.value.contextp = MY_CONTEXT;                  \
+    marpaESLIFAlternative.grammarLengthl = 1;                           \
+                                                                        \
+    GENERICLOGGER_DEBUGF(genericLoggerp, "Injecting <%s> with value '%c'", names, boolval); \
+    if (! marpaESLIFRecognizer_lexeme_readb(marpaESLIFRecognizerp, &marpaESLIFAlternative, 0)) { \
+      GENERICLOGGER_ERRORF(genericLoggerp, "Failure to set <%s> alternative", names); \
+      marpaESLIFRecognizer_progressLogb(marpaESLIFRecognizerp, -1, -1, GENERICLOGGER_LOGLEVEL_ERROR); \
+      goto err;                                                         \
+    }                                                                   \
+  } while (0)
+
+=back
+
+If we would have been using built-in lexing, the symbol values of any keywords would have been of type ARRAY, i.e. an array of bytes. But we have decided to do external lexing: then we can associate what we want to symbol values, and indeed we are injecting either UNDEF when we do not mind, either a CHAR when it is important.
+
+When doing valuation, the grammar will ask for function pointers that implement our actions:
+
+=over
+
+=item action_not
+
+We know that the rule is:
+
+  NOT Sentence
+
+There are two arguments on the stack. C<Sentence> is a "boolean", i.e. a value of type SHORT.
+
+=item action_and
+
+Rule is:
+
+  Sentence        AND Sentence
+
+There are three arguments on the stack. Both C<Sentence>s are "boolean"s, i.e. values of type SHORT. C<AND> is associated to an undefined value.
+
+=item action_or
+
+Rule is:
+
+  Sentence        OR Sentence
+
+There are three arguments on the stack. Both C<Sentence>s are "boolean"s, i.e. values of type SHORT. C<OR> is associated to an undefined value.
+
+=item action_implies
+
+Rule is:
+
+  Sentence        IMPLIES Sentence
+
+There are three arguments on the stack. Both C<Sentence>s are "boolean"s, i.e. values of type SHORT. C<IMPLIES> is associated to an undefined value.
+
+=item action_equivalent
+
+Rule is:
+
+  Sentence        EQUIVALENT Sentence
+
+There are three arguments on the stack. Both C<Sentence>s are "boolean"s, i.e. values of type SHORT. C<EQUIVALENT> is associated to an undefined value.
+
+=back
+
+We will test all combinaisons of C<P>, C<Q> and C<R> values. In the user valuation context, boolean values associated to characters C<P>, C<Q> and C<R> are stored in members of type short C<valueContext.p>, C<valueContext.q> and C<valueContext.r>, respectively:
+
+  for (valueContext.p = 0; valueContext.p < 2; valueContext.p++) {
+    for (valueContext.q = 0; valueContext.q < 2; valueContext.q++) {
+      for (valueContext.r = 0; valueContext.r < 2; valueContext.r++) {
+
+        marpaESLIFValueOption.userDatavp             = &valueContext;
+        marpaESLIFValueOption.ruleActionResolverp    = ruleActionResolverp;
+        marpaESLIFValueOption.symbolActionResolverp  = NULL; /* No symbol action resolver... Okay we use the default */
+        marpaESLIFValueOption.importer               = importb;
+        marpaESLIFValueOption.highRankOnlyb          = 1;    /* Recommended value */
+        marpaESLIFValueOption.orderByRankb           = 1;    /* Recommended value */
+        marpaESLIFValueOption.ambiguousb             = 0;    /* our BNF is not ambiguous thanks to loosen operator and group association */
+        marpaESLIFValueOption.maxParsesi             = 0;    /* Meaningless here since we say it is not ambiguous */
+        marpaESLIFValueOption.nullb                  = 0;    /* Recommended value */
+
+        GENERICLOGGER_INFOF(genericLoggerp, "Valuation with {P, Q, R} = {%d, %d, %d} of %s ", (int) valueContext.p, (int) valueContext.q, (int) valueContext.r, examples);
+
+        marpaESLIFValuep = marpaESLIFValue_newp(marpaESLIFRecognizerp, &marpaESLIFValueOption);
+        if (marpaESLIFValuep == NULL) {
+          goto err;
+        }
+
+        if (marpaESLIFValue_valueb(marpaESLIFValuep) <= 0) {
+          goto err;
+        }
+
+        marpaESLIFValue_freev(marpaESLIFValuep);
+        marpaESLIFValuep = NULL;
+
+        GENERICLOGGER_INFOF(genericLoggerp, ".............. {P, Q, R} = {%d, %d, %d}... %d ", (int) valueContext.p, (int) valueContext.q, (int) valueContext.r, (int) valueContext.result);
+        if (valueContext.result != 0) {
+          GENERICLOGGER_ERROR(genericLoggerp, "Valuation result is not zero !?");
+          goto err;
+        }
+      }
+    }
+  }
+
+Please look to the code, you will see that indeed, the final result is always a false value!
+
+   INFO Injecting lexemes for: (P AND R IMPLIES Q) AND P AND R AND NOT Q
+  DEBUG Injecting <LPAREN>
+  DEBUG Injecting <SYMBOL> with value 'P'
+  DEBUG Injecting <AND>
+  DEBUG Injecting <SYMBOL> with value 'R'
+  DEBUG Injecting <IMPLIES>
+  DEBUG Injecting <SYMBOL> with value 'Q'
+  DEBUG Injecting <RPAREN>
+  DEBUG Injecting <AND>
+  DEBUG Injecting <SYMBOL> with value 'P'
+  DEBUG Injecting <AND>
+  DEBUG Injecting <SYMBOL> with value 'R'
+  DEBUG Injecting <AND>
+  DEBUG Injecting <NOT>
+  DEBUG Injecting <SYMBOL> with value 'Q'
+   INFO Valuation with {P, Q, R} = {0, 0, 0} of (P AND R IMPLIES Q) AND P AND R AND NOT Q 
+  DEBUG .............. {P, Q, R} = {0, 0, 0}... 0 AND 0 : 0
+  DEBUG .............. {P, Q, R} = {0, 0, 0}... 0 IMPLIES 0 : 1
+  DEBUG .............. {P, Q, R} = {0, 0, 0}... 1 AND 0 : 0
+  DEBUG .............. {P, Q, R} = {0, 0, 0}... 0 AND 0 : 0
+  DEBUG .............. {P, Q, R} = {0, 0, 0}... NOT 0 : 1
+  DEBUG .............. {P, Q, R} = {0, 0, 0}... 0 AND 1 : 0
+   INFO .............. {P, Q, R} = {0, 0, 0}... 0 
+   INFO Valuation with {P, Q, R} = {0, 0, 1} of (P AND R IMPLIES Q) AND P AND R AND NOT Q 
+  DEBUG .............. {P, Q, R} = {0, 0, 1}... 0 AND 1 : 0
+  DEBUG .............. {P, Q, R} = {0, 0, 1}... 0 IMPLIES 0 : 1
+  DEBUG .............. {P, Q, R} = {0, 0, 1}... 1 AND 0 : 0
+  DEBUG .............. {P, Q, R} = {0, 0, 1}... 0 AND 1 : 0
+  DEBUG .............. {P, Q, R} = {0, 0, 1}... NOT 0 : 1
+  DEBUG .............. {P, Q, R} = {0, 0, 1}... 0 AND 1 : 0
+   INFO .............. {P, Q, R} = {0, 0, 1}... 0 
+   INFO Valuation with {P, Q, R} = {0, 1, 0} of (P AND R IMPLIES Q) AND P AND R AND NOT Q 
+  DEBUG .............. {P, Q, R} = {0, 1, 0}... 0 AND 0 : 0
+  DEBUG .............. {P, Q, R} = {0, 1, 0}... 0 IMPLIES 1 : 1
+  DEBUG .............. {P, Q, R} = {0, 1, 0}... 1 AND 0 : 0
+  DEBUG .............. {P, Q, R} = {0, 1, 0}... 0 AND 0 : 0
+  DEBUG .............. {P, Q, R} = {0, 1, 0}... NOT 1 : 0
+  DEBUG .............. {P, Q, R} = {0, 1, 0}... 0 AND 0 : 0
+   INFO .............. {P, Q, R} = {0, 1, 0}... 0 
+   INFO Valuation with {P, Q, R} = {0, 1, 1} of (P AND R IMPLIES Q) AND P AND R AND NOT Q 
+  DEBUG .............. {P, Q, R} = {0, 1, 1}... 0 AND 1 : 0
+  DEBUG .............. {P, Q, R} = {0, 1, 1}... 0 IMPLIES 1 : 1
+  DEBUG .............. {P, Q, R} = {0, 1, 1}... 1 AND 0 : 0
+  DEBUG .............. {P, Q, R} = {0, 1, 1}... 0 AND 1 : 0
+  DEBUG .............. {P, Q, R} = {0, 1, 1}... NOT 1 : 0
+  DEBUG .............. {P, Q, R} = {0, 1, 1}... 0 AND 0 : 0
+   INFO .............. {P, Q, R} = {0, 1, 1}... 0 
+   INFO Valuation with {P, Q, R} = {1, 0, 0} of (P AND R IMPLIES Q) AND P AND R AND NOT Q 
+  DEBUG .............. {P, Q, R} = {1, 0, 0}... 1 AND 0 : 0
+  DEBUG .............. {P, Q, R} = {1, 0, 0}... 0 IMPLIES 0 : 1
+  DEBUG .............. {P, Q, R} = {1, 0, 0}... 1 AND 1 : 1
+  DEBUG .............. {P, Q, R} = {1, 0, 0}... 1 AND 0 : 0
+  DEBUG .............. {P, Q, R} = {1, 0, 0}... NOT 0 : 1
+  DEBUG .............. {P, Q, R} = {1, 0, 0}... 0 AND 1 : 0
+   INFO .............. {P, Q, R} = {1, 0, 0}... 0 
+   INFO Valuation with {P, Q, R} = {1, 0, 1} of (P AND R IMPLIES Q) AND P AND R AND NOT Q 
+  DEBUG .............. {P, Q, R} = {1, 0, 1}... 1 AND 1 : 1
+  DEBUG .............. {P, Q, R} = {1, 0, 1}... 1 IMPLIES 0 : 0
+  DEBUG .............. {P, Q, R} = {1, 0, 1}... 0 AND 1 : 0
+  DEBUG .............. {P, Q, R} = {1, 0, 1}... 0 AND 1 : 0
+  DEBUG .............. {P, Q, R} = {1, 0, 1}... NOT 0 : 1
+  DEBUG .............. {P, Q, R} = {1, 0, 1}... 0 AND 1 : 0
+   INFO .............. {P, Q, R} = {1, 0, 1}... 0 
+   INFO Valuation with {P, Q, R} = {1, 1, 0} of (P AND R IMPLIES Q) AND P AND R AND NOT Q 
+  DEBUG .............. {P, Q, R} = {1, 1, 0}... 1 AND 0 : 0
+  DEBUG .............. {P, Q, R} = {1, 1, 0}... 0 IMPLIES 1 : 1
+  DEBUG .............. {P, Q, R} = {1, 1, 0}... 1 AND 1 : 1
+  DEBUG .............. {P, Q, R} = {1, 1, 0}... 1 AND 0 : 0
+  DEBUG .............. {P, Q, R} = {1, 1, 0}... NOT 1 : 0
+  DEBUG .............. {P, Q, R} = {1, 1, 0}... 0 AND 0 : 0
+   INFO .............. {P, Q, R} = {1, 1, 0}... 0 
+   INFO Valuation with {P, Q, R} = {1, 1, 1} of (P AND R IMPLIES Q) AND P AND R AND NOT Q 
+  DEBUG .............. {P, Q, R} = {1, 1, 1}... 1 AND 1 : 1
+  DEBUG .............. {P, Q, R} = {1, 1, 1}... 1 IMPLIES 1 : 1
+  DEBUG .............. {P, Q, R} = {1, 1, 1}... 1 AND 1 : 1
+  DEBUG .............. {P, Q, R} = {1, 1, 1}... 1 AND 1 : 1
+  DEBUG .............. {P, Q, R} = {1, 1, 1}... NOT 1 : 0
+  DEBUG .............. {P, Q, R} = {1, 1, 1}... 1 AND 0 : 0
+   INFO .............. {P, Q, R} = {1, 1, 1}... 0 
+

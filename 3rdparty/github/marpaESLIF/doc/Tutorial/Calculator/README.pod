@@ -1,0 +1,1149 @@
+=encoding UTF-8
+
+=head1 NAME
+
+marpaESLIF_CALCULATOR - Extended Marpa's Scanless Interface Calculator Tutorial
+
+=head1 DESCRIPTION
+
+marpaESLIF is a Scanless Interface expressed in a BNF format, that is using L<marpaWrapper|https://github.com/jddurand/c-marpaWrapper>, itself being a thin interface on top of L<libmarpa|https://jeffreykegler.github.io/Marpa-web-site/libmarpa.html> parser.
+
+This documentation is giving a tutorial with a calculator as example.
+
+=head2 GRAMMAR v1
+
+We start with the simplest grammar:
+
+    Expression ::=
+        /[\d]+/
+        | '(' Expression ')'              assoc => group
+       ||     Expression '**' Expression  assoc => right
+       ||     Expression  '*' Expression
+        |     Expression  '/' Expression
+       ||     Expression  '+' Expression
+        |     Expression  '-' Expression
+
+which means obviously that an expression is number, or a group of expressions, or an sub-expression where the 'power of' operator has right associativity (i.e. the C<Expression> on the right is to be processed first).
+
+To get that compiled you will need of course marpaESLIF header files, and we use the generic logger to have something in the output. The grammar length is given with C<strlen(), requiring C#<string.h>#, we will use C<perror()> and C<exit()> that requires C#<stdio.h># and C#<stdlib.h>#:
+
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <marpaESLIF.h>
+  #include <genericLogger.h>
+
+Grammar is set in a constant:
+
+  const static char *grammars =
+    "Expression ::=\n"
+    "    /[\\d]+/\n"
+    "    | '(' Expression ')'              assoc => group\n"
+    "   ||     Expression '**' Expression  assoc => right\n"
+    "   ||     Expression  '*' Expression\n"
+    "    |     Expression  '/' Expression\n"
+    "   ||     Expression  '+' Expression\n"
+    "    |     Expression  '-' Expression\n"
+    "\n";
+
+and main program will instanciate a generic logger:
+
+  genericLoggerp = GENERICLOGGER_NEW(GENERICLOGGER_LOGLEVEL_DEBUG);
+
+then a marpaESLIF instance:
+
+  marpaESLIFp = marpaESLIF_newp(&marpaESLIFOption);
+
+then compile the grammar:
+
+  marpaESLIFGrammar_t *marpaESLIFGrammarp = marpaESLIFGrammar_newp(marpaESLIFp, &marpaESLIFGrammarOption);
+
+=head3 Creating the generic logger
+
+This is as simple as:
+
+  genericLogger_t             *genericLoggerp;
+  ./..
+  genericLoggerp = GENERICLOGGER_NEW(GENERICLOGGER_LOGLEVEL_DEBUG);
+  if (genericLoggerp == NULL) {
+    perror("GENERICLOGGER_NEW");
+    exit(1);
+  }
+
+=head3 Creating a marpaESLIF instance
+
+A C<marpaESLIFOption_t> structure is filled with generic logger:
+
+  marpaESLIFOption_t           marpaESLIFOption;
+  marpaESLIF_t                *marpaESLIFp;
+  ./..
+  marpaESLIFOption.genericLoggerp = genericLoggerp;
+
+and obviously we does not expect that to fail:
+
+  marpaESLIFp = marpaESLIF_newp(&marpaESLIFOption);
+  if (marpaESLIFp == NULL) {
+    exit(1);
+  }
+
+=head3 Creating a marpaESLIFGrammar instance
+
+A C<marpaESLIFGrammarOption_t> structure is setup like this:
+
+  marpaESLIFGrammarOption_t    marpaESLIFGrammarOption;
+  marpaESLIFGrammar_t         *marpaESLIFGrammarp;
+  ./..
+
+  marpaESLIFGrammarOption.bytep               = (void *) grammars;
+  marpaESLIFGrammarOption.bytel               = strlen(grammars);
+  marpaESLIFGrammarOption.encodings           = NULL;
+  marpaESLIFGrammarOption.encodingl           = 0;
+  marpaESLIFGrammarp = marpaESLIFGrammar_newp(marpaESLIFp, &marpaESLIFGrammarOption);
+  if (marpaESLIFGrammarp == NULL) {
+    exit(1);
+  }
+
+which means: the whole grammar start at C<bytep>, is of length C<bytel>, and please manage grammar encoding yourself.
+
+=head3 Cleanup
+
+We have to clean the grammar,the marpaESLIF and the generic logger:
+
+  marpaESLIFGrammar_freev(marpaESLIFGrammarp);
+  marpaESLIF_freev(marpaESLIFp);
+  GENERICLOGGER_FREE(genericLoggerp);
+
+
+=head3 The program
+
+All in all, this give:
+
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <marpaESLIF.h>
+  #include <genericLogger.h>
+  
+  const static char *grammars =
+    "Expression ::=\n"
+    "    /[\\d]+/\n"
+    "    | '(' Expression ')'              assoc => group\n"
+    "   ||     Expression '**' Expression  assoc => right\n"
+    "   ||     Expression  '*' Expression\n"
+    "    |     Expression  '/' Expression\n"
+    "   ||     Expression  '+' Expression\n"
+    "    |     Expression  '-' Expression\n"
+    "\n";
+  
+  int main() {
+    genericLogger_t             *genericLoggerp;
+    marpaESLIFOption_t           marpaESLIFOption;
+    marpaESLIF_t                *marpaESLIFp;
+    marpaESLIFGrammarOption_t    marpaESLIFGrammarOption;
+    marpaESLIFGrammar_t         *marpaESLIFGrammarp;
+    int                          exiti;
+  
+    genericLoggerp = GENERICLOGGER_NEW(GENERICLOGGER_LOGLEVEL_DEBUG);
+    if (genericLoggerp == NULL) {
+      perror("GENERICLOGGER_NEW");
+      exit(1);
+    }
+  
+    marpaESLIFOption.genericLoggerp = genericLoggerp;
+    marpaESLIFp = marpaESLIF_newp(&marpaESLIFOption);
+    if (marpaESLIFp == NULL) {
+      exit(1);
+    }
+  
+    marpaESLIFGrammarOption.bytep               = (void *) grammars;
+    marpaESLIFGrammarOption.bytel               = strlen(grammars);
+    marpaESLIFGrammarOption.encodings           = NULL;
+    marpaESLIFGrammarOption.encodingl           = 0;
+    marpaESLIFGrammarp = marpaESLIFGrammar_newp(marpaESLIFp, &marpaESLIFGrammarOption);
+    if (marpaESLIFGrammarp == NULL) {
+      exit(1);
+    }
+  
+    marpaESLIFGrammar_freev(marpaESLIFGrammarp);
+    marpaESLIF_freev(marpaESLIFp);
+    GENERICLOGGER_FREE(genericLoggerp);
+
+    exit(0);
+  }
+
+=head2 Grammar v2: discard and parsing test
+
+Obviously, we would like the grammar to discard automatically any non-significant I<whitespace>, as it is done traditionnaly in any language:
+
+  :discard ::= [\s]
+
+will do it.
+
+And we want to have I<actions> to compute the arithmetic result:
+
+=over
+
+=item * C</[\d]+/> obviously give an integer
+
+        /[\d]+/ action => do_int
+
+=item * Parenthesized expression
+
+We will just copy what is in the middle:
+
+  '(' Expression ')'              assoc => group action => ::copy[1]
+
+Here C<[1]> is the relative indice from the first RHS.
+
+=item * Any other rule can give anything, we will choose a C<double> for convenience
+
+No need to duplicate an eventual C<action => do_op> everywhere, since these are the only other rules, we can put that in the C<:default> statement:
+
+  :default ::= action => do_op
+
+So we end up with this grammar:
+
+    :default ::= action => do_op
+    :discard ::= [\s]
+    Expression ::=
+        /[\d]+/                           action => do_int
+        | '(' Expression ')'              assoc => group action => ::copy[1]
+       ||     Expression '**' Expression  assoc => right
+       ||     Expression  '*' Expression
+        |     Expression  '/' Expression
+       ||     Expression  '+' Expression
+        |     Expression  '-' Expression
+
+
+At this stage, if we do not instanciate any valuation, it is perfectly okay to have no action implementation. Indeed, we can try immediately to parse some input. For example one that is compliant with the grammar. Since marpaESLIF is working natively in stream mode, we have to have a I<reader>, that in our case will send the whole chunk of input in one go:
+
+  typedef struct reader_context {
+    char            *inputs;
+    size_t           inputl;
+  } reader_context_t;
+
+  static short inputReaderb(void    *userDatavp,
+                            char   **inputsp,
+                            size_t  *inputlp,
+                            short   *eofbp,
+                            short   *characterStreambp,
+                            char   **encodingsp,
+                            size_t  *encodinglp);
+  ./..
+  
+  static short inputReaderb(void    *userDatavp,
+                            char   **inputsp,
+                            size_t  *inputlp,
+                            short   *eofbp,
+                            short   *characterStreambp,
+                            char   **encodingsp,
+                            size_t  *encodinglp)
+  {
+    reader_context_t *reader_contextp = (reader_context_t *) userDatavp;
+  
+    *inputsp              = reader_contextp->inputs;
+    *inputlp              = reader_contextp->inputl;
+    *eofbp                = 1;    /* One chunk */
+    *characterStreambp    = 1;    /* We say this is a stream of characters */
+    *encodingsp           = NULL;
+    *encodinglp           = 0;
+
+    return 1;
+  }
+
+We cannot use the C<marpaESLIFGrammar_parseb> method yet, because it will try to perform valuation. But we can ask for scanning, and only that with the method C<marpaESLIFRecognizer_scanb>. So we will instanciate a recognizer:
+
+  reader_context_t             reader_context;
+  marpaESLIFRecognizerOption_t marpaESLIFRecognizerOption;
+  marpaESLIFRecognizer_t      *marpaESLIFRecognizerp;
+  ./..
+  marpaESLIFRecognizerOption.userDatavp        = &reader_context;
+  marpaESLIFRecognizerOption.readerCallbackp   = inputReaderb;
+  marpaESLIFRecognizerOption.disableThresholdb = 0;  /* No disable of threshold warning */
+  marpaESLIFRecognizerOption.exhaustedb        = 0;  /* No exhaustion event */
+  marpaESLIFRecognizerOption.newlineb          = 1;  /* Do newline counting */
+  marpaESLIFRecognizerOption.trackb            = 1;  /* Do absolute position tracking */
+  marpaESLIFRecognizerOption.bufsizl           = 0;  /* Recommended value */
+  marpaESLIFRecognizerOption.buftriggerperci   = 50; /* Recommended value */
+  marpaESLIFRecognizerOption.bufaddperci       = 50; /* Recommended value */
+  marpaESLIFRecognizerOption.ifActionResolverp = NULL; /* symbol if-action resolver */
+  marpaESLIFRecognizerp = marpaESLIFRecognizer_newp(marpaESLIFGrammarp, &marpaESLIFRecognizerOption);
+  if (marpaESLIFRecognizerp == NULL) {
+    exit(1);
+  }
+  ./..
+  marpaESLIFRecognizer_freev(marpaESLIFRecognizerp);
+
+And ask for a scan of what it is in C<stdin> (we assume that 4096 bytes is enough -;):
+
+  char                         inputs[4096];
+  ./..
+  if (fgets(inputs, sizeof(inputs), stdin) == NULL) {
+    perror("fgets");
+    exit(1);
+  }
+  reader_context.inputs = inputs;
+  reader_context.inputl = strlen(inputs);
+  if (! marpaESLIFRecognizer_scanb(marpaESLIFRecognizerp,
+                                   0 /* initialEventsb */,
+                                   NULL /* continuebp*/,
+                                   NULL /* exhaustedbp */)) {
+    exit(1);
+  }
+
+Let's try on something that will be ok:
+
+  echo 1 | /path/to/your/calculator
+
+... And with spaces:
+
+  echo "1 + 2" | /path/to/your/calculator
+
+No output. Good, parsing was ok. Now on something that is not ok:
+
+  echo "( 1 + 2 xxxxx" | /path/to/your/calculator
+
+Output looks like (we removed a timestamp generated by the generic logger -;):
+
+  ERROR --------------------------------------------
+  ERROR Recognizer failure. Current state:
+  ERROR [F3@3..4] Expression[1] ::= Expression[2] .
+  ERROR [F4@3..4] Expression[2] ::= Expression[3] .
+  ERROR [F5@3..4] Expression[3] ::= /[\d]+/ .
+  ERROR [F10@1..4] Expression[0] ::= Expression[0]
+  ERROR [F10@1..4]                   '+'
+  ERROR [F10@1..4]                   Expression[1] .
+  ERROR [R7@3..4] Expression[2] ::= Expression[3]
+  ERROR [R7@3..4]                   . '**'
+  ERROR [R7@3..4]                   Expression[2]
+  ERROR [R8@3..4] Expression[1] ::= Expression[1]
+  ERROR [R8@3..4]                   . '*'
+  ERROR [R8@3..4]                   Expression[2]
+  ERROR [R9@3..4] Expression[1] ::= Expression[1]
+  ERROR [R9@3..4]                   . '/'
+  ERROR [R9@3..4]                   Expression[2]
+  ERROR [R10@1..4] Expression[0] ::= Expression[0]
+  ERROR [R10@1..4]                   . '+'
+  ERROR [R10@1..4]                   Expression[1]
+  ERROR [R11@1..4] Expression[0] ::= Expression[0]
+  ERROR [R11@1..4]                   . '-'
+  ERROR [R11@1..4]                   Expression[1]
+  ERROR [R6@0..4] Expression[3] ::= '('
+  ERROR [R6@0..4]                   Expression[0]
+  ERROR [R6@0..4]                   . ')'
+  ERROR --------------------------------------------
+  ERROR Expected terminal: ')'
+  ERROR Expected terminal: '**'
+  ERROR Expected terminal: '*'
+  ERROR Expected terminal: '/'
+  ERROR Expected terminal: '+'
+  ERROR Expected terminal: '-'
+  ERROR --------------------------------------------
+  ERROR UTF-8 converted data before the failure (8 bytes)
+  ERROR 0x000000: 28 20 31 20 2b 20 32 20                         ( 1 + 2         
+  ERROR --------------------------------------------
+  ERROR <<<<<< RECOGNIZER FAILURE AFTER LINE No 1 COLUMN No 8, HERE: >>>>>>
+  ERROR --------------------------------------------
+  ERROR UTF-8 converted data after the failure (6 bytes)
+  ERROR 0x000000: 78 78 78 78 78 0a                               xxxxx.          
+  ERROR --------------------------------------------
+
+You see that by default, marpaESLIF will always send to the generic logger, at the C<ERROR> log level, all valuable information:
+
+=over
+
+=item * A progress report of current grammar position in the scanning
+
+=item * The expected terminals and their definition
+
+Their definition, here, is always an ASCII representation tentative.
+
+=item * A dump of the input
+
+The dump always takes into account if this is stream of characters or not, by saying so: C<UTF-8 converted data>. In case of a binary stream it would say C<Raw data>. The dump is always giving a maximum of C<128> bytes before and after the exact point of failure in input, when possible.
+
+=back
+
+So take care, this is just a I<test of the parsing phase>. Parsing can be complete, this does not mean that there is a value. For example, just scanning this:
+
+  echo "( 1 + 2" | /path/to/your/calculator
+
+will output nothing. And this is normal. From the grammar point of view, even if parsing is not complete, parsing did not fail: the input was conform to the grammar up to its end. This is by doing valuation that we will discover there is a problem... This can also be predicted by asking for the state of the recognizer... Suppose there would be this line of code just after scanning:
+
+  marpaESLIFRecognizer_progressLogb(marpaESLIFRecognizerp, -1, -1, GENERICLOGGER_LOGLEVEL_DEBUG);
+
+then the output would be:
+
+  DEBUG [F3@3..4] Expression[1] ::= Expression[2] .
+  DEBUG [F4@3..4] Expression[2] ::= Expression[3] .
+  DEBUG [F5@3..4] Expression[3] ::= /[\d]+/ .
+  DEBUG [F10@1..4] Expression[0] ::= Expression[0]
+  DEBUG [F10@1..4]                   '+'
+  DEBUG [F10@1..4]                   Expression[1] .
+  DEBUG [R7@3..4] Expression[2] ::= Expression[3]
+  DEBUG [R7@3..4]                   . '**'
+  DEBUG [R7@3..4]                   Expression[2]
+  DEBUG [R8@3..4] Expression[1] ::= Expression[1]
+  DEBUG [R8@3..4]                   . '*'
+  DEBUG [R8@3..4]                   Expression[2]
+  DEBUG [R9@3..4] Expression[1] ::= Expression[1]
+  DEBUG [R9@3..4]                   . '/'
+  DEBUG [R9@3..4]                   Expression[2]
+  DEBUG [R10@1..4] Expression[0] ::= Expression[0]
+  DEBUG [R10@1..4]                   . '+'
+  DEBUG [R10@1..4]                   Expression[1]
+  DEBUG [R11@1..4] Expression[0] ::= Expression[0]
+  DEBUG [R11@1..4]                   . '-'
+  DEBUG [R11@1..4]                   Expression[1]
+  DEBUG [R6@0..4] Expression[3] ::= '('
+  DEBUG [R6@0..4]                   Expression[0]
+  DEBUG [R6@0..4]                   . ')'
+
+and we see clearly that rule No C<6> is not complete...:
+
+  DEBUG [R6@0..4] Expression[3] ::= '('
+  DEBUG [R6@0..4]                   Expression[0]
+  DEBUG [R6@0..4]                   . ')'
+
+=back
+
+=head2 Grammar v3: actions
+
+Let's try valuation without setting action resolvers. We can use the previous recognizer and setup a marpaESLIFValue, or use the direct C<marpaESLIFGrammar_parseb()> method. Let's do the marpaESLIFValue:
+
+  /* Value context */
+  typedef enum value_type {
+    INTEGER_CONTEXT = 1,
+    DOUBLE_CONTEXT
+  }   value_type_t;
+
+  typedef struct value_context {
+    genericLogger_t *genericLoggerp; /* Logging convenience */
+    value_type_t typei;
+    union {
+      int i;
+      double d;
+    } u;
+  } value_context_t;
+  ./..
+  /* marpaESLIFValueResult importer - in this tutorial we support only int and double */
+  short importb(marpaESLIFValue_t *marpaESLIFValuep, void *userDatavp, marpaESLIFValueResult_t *marpaESLIFValueResultp);
+  ./..
+  marpaESLIFValueOption_t      marpaESLIFValueOption;
+  marpaESLIFValue_t           *marpaESLIFValuep;
+  int                          rcValueb;
+  ./..
+  marpaESLIFValueOption.userDatavp             = &value_context;
+  marpaESLIFValueOption.ruleActionResolverp    = ruleActionResolverp;
+  marpaESLIFValueOption.symbolActionResolverp  = NULL; /* No symbol action resolver... Okay we use the default */
+  marpaESLIFValueOption.importerp              = importb;
+  marpaESLIFValueOption.highRankOnlyb          = 1;    /* Recommended value */
+  marpaESLIFValueOption.orderByRankb           = 1;    /* Recommended value */
+  marpaESLIFValueOption.ambiguousb             = 0;    /* Recommended value */
+  marpaESLIFValueOption.nullb                  = 0;    /* Recommended value */
+  marpaESLIFValueOption.maxParsesi             = 0;    /* Get all parse tree values - meaningless because ambiguousb is false */
+  marpaESLIFValuep = marpaESLIFValue_newp(marpaESLIFRecognizerp, &marpaESLIFValueOption);
+  if (marpaESLIFValuep == NULL) {
+    exit(1);
+  }
+  if (! marpaESLIFValue_valueb(marpaESLIFValuep)) {
+    exit(1);
+  }
+
+You see that we have implemented an importer: this is a B<required> callback if a user wants to know the result of a  doing valuation: the importer is always invoked at the very end of the parsing if it is not C<NULL>, to transfer result to userland.
+
+See the comment on symbol action resolver? The default for symbol action is to put on the stack a data of type I<array>, i.e. a tuple {pointer,size}. This default is okay for most applications, and definitely fine with us.
+
+Remember our example that is a priori incomplete, though the scanning did not yell. Valuation will say there is really a problem:
+
+  echo "( 1 + 2" | /path/to/your/calculator
+  ERROR MARPA_ERR_NO_PARSE: No parse
+
+And what about something that is complete, but rule resolver is missing:
+
+  echo "1 + 2" | /path/to/your/calculator
+  ERROR Cannot execute action "do_int": no rule action resolver
+  (recognizer state would follow)
+
+So we have to implement the rules, and the rule resolver. Rules themselves are simple, and we have two of them:
+
+=over
+
+=item * do_op
+
+=item * do_int
+
+=back
+
+A rule prototype is always:
+
+  typedef short (*marpaESLIFValueRuleCallback_t)(void *userDatavp,
+                                                 marpaESLIFValue_t *marpaESLIFValuep,
+                                                 int arg0i,
+                                                 int argni,
+                                                 int resulti,
+                                                 short nullableb);
+
+A typical implementation is always getting data from the stack, and put the result, for example with C<do_int>, without error checking:
+
+  static char intContext;
+  /*****************************************************************************/
+  static short do_int(void *userDatavp, marpaESLIFValue_t *marpaESLIFValuep, int arg0i, int argni, int resulti, short nullableb)
+  /*****************************************************************************/
+  {
+    /* /[\d]+/  action => do_int */
+    marpaESLIFValueResult_t *marpaESLIFValueResultp;
+    marpaESLIFValueResult_t  marpaESLIFValueResult;
+    int                      i;
+    /* Get value at stack indice arg0i */
+    marpaESLIFValueResultp = marpaESLIFValue_stack_getp(marpaESLIFValuep, arg0i);
+    /* This is an array of UTF-8 bytes, with a hiden NUL termination byte */
+    i = atoi((char *) marpaESLIFValueResultp->u.a.p);
+    /* Store the result at stack indice resulti */
+    marpaESLIFValueResult.contextp        = &intContext;               /* Anything but NULL */
+    marpaESLIFValueResult.representationp = NULL;                      /* No representation */
+    marpaESLIFValueResult.type            = MARPAESLIF_VALUE_TYPE_INT; /* Integer type */
+    marpaESLIFValueResult.u.i             = i;                         /* Integer value */
+    return marpaESLIFValue_stack_setb(marpaESLIFValuep, resulti, &marpaESLIFValueResult);
+  }
+
+Here you can say "but atoi() is unsafe here! What guarantees that this is NUL-terminated?". This is something that the end-user have to know: marpaESLIF B<always put a NUL byte> to any buffer that the end-user can access. Therefore, it is safe. This systematic NUL-byte <never> appear in any size information. It is just systematically added to any memory allocation, and set by the engine to the hardcoded C<'\0'> value.
+
+The implementation of C<do_op> is complicated I<only> because we maintained the possibility to have a double or an int on the stack. A version without error checking is:
+
+  /*****************************************************************************/
+  static short do_op(void *userDatavp, marpaESLIFValue_t *marpaESLIFValuep, int arg0i, int argni, int resulti, short nullableb)
+  /*****************************************************************************/
+  {
+    /* Expression OPERATOR Expression */
+    marpaESLIFValueResult_t *marpaESLIFValueResultpp[3];
+    marpaESLIFValueResult_t marpaESLIFValueResult;
+    int     j;
+    int     i[2];
+    double  d[2];
+    short   intb[2];
+    short   doubleb[2];
+    char   *ops;
+    int     valuei;
+    double  valued;
+    short   resultIsIntb;
+    /* ... Get arguments */
+    marpaESLIFValueResultpp[0] = marpaESLIFValue_stack_getp(marpaESLIFValuep, arg0i);
+    marpaESLIFValueResultpp[1] = marpaESLIFValue_stack_getp(marpaESLIFValuep, argni);
+    /* ... Check argument contexts */
+    intb[0] = (marpaESLIFValueResultpp[0]->contextp == &intContext);
+    intb[1] = (marpaESLIFValueResultpp[1]->contextp == &intContext);
+    doubleb[0] = (marpaESLIFValueResultpp[0]->contextp == &doubleContext);
+    doubleb[1] = (marpaESLIFValueResultpp[1]->contextp == &doubleContext);
+    /* ... Get values depending on context */
+    for (j = 0; j < 2; j++) {
+      /* Get values */
+      if (intb[j]) {
+        i[j] = marpaESLIFValueResultpp[j]->u.i;
+      } else {
+        d[j] = marpaESLIFValueResultpp[j]->u.d;
+      }
+    }
+    /* Get operator */
+    /* By definition OPERATOR is a lexeme, i.e. an ARRAY */
+    marpaESLIFValueResultpp[2] = marpaESLIFValue_stack_getp(marpaESLIFValuep, arg0i + 1);
+    ops = (char *) marpaESLIFValueResultpp[2]->u.a.p;
+    /* For convenience, marpaESLIF is ALWAYS putting a NUL character after every lexeme buffer. */
+    /* Do the operation */    
+    if (strcmp(ops, "**") == 0) {
+      /* Both are int ? */
+      if (intb[0] && intb[1]) {
+        valued = pow((double) i[0], (double) i[1]);
+      } else {
+        valued = pow((intb[0] ? (double) i[0] : d[0]), (intb[1] ? (double) i[1] : d[1]));
+      }
+      resultIsIntb = 0;
+    } else if (strcmp(ops, "*") == 0) {
+      /* Both are int ? */
+      if (intb[0] && intb[1]) {
+        valuei = i[0] * i[1];
+        resultIsIntb = 1;
+      } else {
+        valued = (intb[0] ? (double) i[0] : d[0]) * (intb[1] ? (double) i[1] : d[1]);
+        resultIsIntb = 0;
+      }
+    } else if (strcmp(ops, "/") == 0) {
+      /* Both are int ? */
+      if (intb[0] && intb[1]) {
+        valued = (double) i[0] / (double) i[1];
+      } else {
+        valued = (intb[0] ? (double) i[0] : d[0]) / (intb[1] ? (double) i[1] : d[1]);
+      }
+      resultIsIntb = 0;
+    } else if (strcmp(ops, "+") == 0) {
+      /* Both are int ? */
+      if (intb[0] && intb[1]) {
+        valuei = i[0] + i[1];
+        resultIsIntb = 1;
+      } else {
+        valued = (intb[0] ? (double) i[0] : d[0]) + (intb[1] ? (double) i[1] : d[1]);
+        resultIsIntb = 0;
+      }
+    } else if (strcmp(ops, "-") == 0) {
+      /* Both are int ? */
+      if (intb[0] && intb[1]) {
+        valuei = i[0] - i[1];
+        resultIsIntb = 1;
+      } else {
+        valued = (intb[0] ? (double) i[0] : d[0]) - (intb[1] ? (double) i[1] : d[1]);
+        resultIsIntb = 0;
+      }
+    } else {
+      fprintf(stderr, "Unknown operator %s!\n", ops);
+      return 0;
+    }
+    /* Push result at stack indice resulti */  
+    if (resultIsIntb) {
+      marpaESLIFValueResult.contextp        = &intContext;                  /* Anything but NULL */
+      marpaESLIFValueResult.representationp = NULL;                         /* No representation */
+      marpaESLIFValueResult.type            = MARPAESLIF_VALUE_TYPE_INT;    /* Integer type */
+      marpaESLIFValueResult.u.i             = valuei;                       /* Integer value */
+    } else {
+      marpaESLIFValueResult.contextp        = &doubleContext;               /* Anything but 0 */
+      marpaESLIFValueResult.representationp = NULL;                         /* No representation */
+      marpaESLIFValueResult.type            = MARPAESLIF_VALUE_TYPE_DOUBLE; /* Double type */
+      marpaESLIFValueResult.u.d             = valued;                       /* Double value */
+    }
+    return marpaESLIFValue_stack_setb(marpaESLIFValuep, resulti, &marpaESLIFValueResult);
+  }
+
+And the resolver is nothing else but this simple method, taking into the same remark as before: any buffer that the end-user can access is NUL-terminated. So is C<actions> below:
+
+  static marpaESLIFValueRuleCallback_t ruleActionResolverp(void              *userDatavp,
+                                                           marpaESLIFValue_t *marpaESLIFValuep,
+                                                           char              *actions)
+  {
+    if (strcmp(actions, "do_int") == 0) {
+      return do_int;
+    } else if (strcmp(actions, "do_op") == 0) {
+      return do_op;
+    } else {
+      fprintf(stderr, "Unknown action %s!\n", actions);
+      return NULL;
+    }
+  }
+
+The final value requires an "importer", that will be called internally after valuation is ok. This importer is a single function that receives the final result in a C<marpaESLIFValueResult> structure pointer:
+
+/*****************************************************************************/
+short importb(marpaESLIFValue_t *marpaESLIFValuep, void *userDatavp, marpaESLIFValueResult_t *marpaESLIFValueResultp)
+/*****************************************************************************/
+{
+  value_context_t *value_contextp = (value_context_t *) userDatavp;
+  short            rcb;
+
+  switch (marpaESLIFValueResultp->type) {
+  case MARPAESLIF_VALUE_TYPE_INT:
+    value_contextp->typei = INTEGER_CONTEXT;
+    value_contextp->u.i   = marpaESLIFValueResultp->u.i;
+    rcb = 1;
+    break;
+  case MARPAESLIF_VALUE_TYPE_DOUBLE:
+    value_contextp->typei = DOUBLE_CONTEXT;
+    value_contextp->u.d   = marpaESLIFValueResultp->u.d;
+    rcb = 1;
+    break;
+  default:
+    GENERICLOGGER_ERRORF(value_contextp->genericLoggerp, "Unsupported type %d\n", marpaESLIFValueResultp->type);
+    rcb = 0;
+    break;
+  }
+
+  return rcb;
+}
+
+=head2 Skipping automatically element
+
+Do you remember the group Expression element in the grammar:
+
+  '(' Expression ')'              assoc => group action => ::copy[1]
+
+In fact the C<'('> and C<')'> elements can be automatically skipped. For this tutorial this can sound over complication, but in real life there is a usage for it. The idea is be able to parse C<( Expression )> and get only C<Expression> itself out of the rule. For that we have to I<skip> the elements. This is done by enclosing them by C<(-> and C<-)> keywords. This will form a I<group>. A group can also be formed by using C<(> and C<)> keywords, which means it will not be skipped.
+
+The subtility with groups is that internally marpaESLIF will create a I<dedicated> internal element., e.g.:
+
+  (- '(' -) Expression (- ')' -)              action => ::shift
+
+becomes:
+
+  <Internal[0]> ::= '('
+  <Internal[1]> ::= ')'
+  <Expression> ::= (-<Internal[0]>-) <Expression> (-<Internal[1]>-) action => ::shift
+
+But then the internal rules will get the default action... This is why action are allowed (and recommended) inside groups:
+
+  (- '(' action => ::undef -) Expression (- ')' action => ::undef -) action => ::shift
+
+becomes:
+
+  <Internal[0]> ::= '(' action => ::undef
+  <Internal[1]> ::= ')' action => ::undef
+  <Expression> ::= (-<Internal[0]>-) <Expression> (-<Internal[1]>-) action => ::shift
+
+For our example, the final grammar using skipped elements is:
+
+  :default ::= action => do_op
+  :discard ::= whitespace
+  :discard ::= comment
+  Expression ::=
+      /[\d]+/                          action => do_int
+     | (- '(' action => ::undef -) Expression (- ')' action => ::undef -) assoc => group action => ::shift
+     ||     Expression '**' Expression  assoc => right
+     ||     Expression  '*' Expression
+      |     Expression  '/' Expression
+     ||     Expression  '+' Expression
+      |     Expression  '-' Expression
+  whitespace :[1]:= [\s]
+  comment ~ /(?:(?:(?:\/\/)(?:[^\n]*)(?:\n|\z))|(?:(?:\/\*)(?:(?:[^\*]+|\*(?!\/))*)(?:\*\/)))/u
+
+=head2 FINAL VERSION
+
+Here is the final version as can be found in the marpaESLIF repository;
+
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <math.h>
+  #include <marpaESLIF.h>
+  #include <genericLogger.h>
+  
+  typedef struct reader_context {
+    char            *inputs;
+    size_t           inputl;
+  } reader_context_t;
+  
+  typedef enum value_type {
+    INTEGER_CONTEXT = 1,
+    DOUBLE_CONTEXT
+  } value_type_t;
+  
+  typedef struct value_context {
+    genericLogger_t *genericLoggerp;
+    value_type_t typei;
+    union {
+      int i;
+      double d;
+    } u;
+  } value_context_t;
+  
+  static char intContext;
+  static char doubleContext;
+  static short                         inputReaderb(void *userDatavp, char **inputsp, size_t *inputlp, short *eofbp, short *characterStreambp, char **encodingsp, size_t *encodinglp);
+  static marpaESLIFValueRuleCallback_t ruleActionResolverp(void *userDatavp, marpaESLIFValue_t *marpaESLIFValuep, char *actions);
+  static short                         do_int(void *userDatavp, marpaESLIFValue_t *marpaESLIFValuep, int arg0i, int argni, int resulti, short nullableb);
+  static short                         do_op(void *userDatavp, marpaESLIFValue_t *marpaESLIFValuep, int arg0i, int argni, int resulti, short nullableb);
+  
+  short                                importb(marpaESLIFValue_t *marpaESLIFValuep, void *userDatavp, marpaESLIFValueResult_t *marpaESLIFValueResultp);
+  
+  const static char *grammars =
+    ":default ::= action => do_op\n"
+    ":discard ::= whitespace\n"
+    ":discard ::= comment\n"
+    "Expression ::=\n"
+    "    /[\\d]+/                          action => do_int\n"
+    "    | (- '(' action => ::undef -) Expression (- ')' action => ::undef -) assoc => group action => ::shift\n"
+    "   ||     Expression '**' Expression  assoc => right\n"
+    "   ||     Expression  '*' Expression\n"
+    "    |     Expression  '/' Expression\n"
+    "   ||     Expression  '+' Expression\n"
+    "    |     Expression  '-' Expression\n"
+    "whitespace :[1]:= [\\s]\n"
+    "comment ~ /(?:(?:(?:\\/\\/)(?:[^\\n]*)(?:\\n|\\z))|(?:(?:\\/\\*)(?:(?:[^\\*]+|\\*(?!\\/))*)(?:\\*\\/)))/u\n"
+    "\n";
+  
+  int main() {
+    genericLogger_t             *genericLoggerp;
+    marpaESLIFOption_t           marpaESLIFOption;
+    marpaESLIF_t                *marpaESLIFp;
+    marpaESLIFGrammarOption_t    marpaESLIFGrammarOption;
+    marpaESLIFGrammar_t         *marpaESLIFGrammarp;
+    int                          leveli;
+    int                          ngrammari;
+    char                        *grammarshows;
+    reader_context_t             reader_context;
+    marpaESLIFRecognizerOption_t marpaESLIFRecognizerOption;
+    marpaESLIFRecognizer_t      *marpaESLIFRecognizerp;
+    char                         inputs[4096];
+    marpaESLIFValueOption_t      marpaESLIFValueOption;
+    marpaESLIFValue_t           *marpaESLIFValuep;
+    char                        *offsetp;
+    size_t                       lengthl;
+    char                        *expressions;
+    value_context_t              value_context;
+  
+    genericLoggerp = GENERICLOGGER_NEW(GENERICLOGGER_LOGLEVEL_DEBUG);
+    if (genericLoggerp == NULL) {
+      perror("GENERICLOGGER_NEW");
+      exit(1);
+    }
+  
+    marpaESLIFOption.genericLoggerp = genericLoggerp;
+    marpaESLIFp = marpaESLIF_newp(&marpaESLIFOption);
+    if (marpaESLIFp == NULL) {
+      exit(1);
+    }
+  
+    GENERICLOGGER_NOTICEF(marpaESLIFOption.genericLoggerp, "Compiling grammar:\n%s", grammars);
+    
+    marpaESLIFGrammarOption.bytep     = (void *) grammars;
+    marpaESLIFGrammarOption.bytel     = strlen(grammars);
+    marpaESLIFGrammarOption.encodings = NULL;
+    marpaESLIFGrammarOption.encodingl = 0;
+    marpaESLIFGrammarp = marpaESLIFGrammar_newp(marpaESLIFp, &marpaESLIFGrammarOption);
+    if (marpaESLIFGrammarp == NULL) {
+      exit(1);
+    }
+  
+    /* Dump grammar */
+    if (marpaESLIFGrammar_ngrammarib(marpaESLIFGrammarp, &ngrammari)) {
+      for (leveli = 0; leveli < ngrammari; leveli++) {
+        if (marpaESLIFGrammar_grammarshowform_by_levelb(marpaESLIFGrammarp, &grammarshows, leveli, NULL)) {
+          GENERICLOGGER_INFO (marpaESLIFOption.genericLoggerp, "-------------------------");
+          GENERICLOGGER_INFOF(marpaESLIFOption.genericLoggerp, "TEST grammar at level %d:", leveli);
+          GENERICLOGGER_INFOF(marpaESLIFOption.genericLoggerp, "-------------------------\n\n%s", grammarshows);
+        }
+      }
+    }
+  
+    marpaESLIFRecognizerOption.userDatavp        = &reader_context;
+    marpaESLIFRecognizerOption.readerCallbackp   = inputReaderb;
+    marpaESLIFRecognizerOption.disableThresholdb = 0;  /* No disable of threshold warning */
+    marpaESLIFRecognizerOption.exhaustedb        = 0;  /* No exhaustion event */
+    marpaESLIFRecognizerOption.newlineb          = 1;  /* Do newline counting */
+    marpaESLIFRecognizerOption.trackb            = 1;  /* Do absolute position tracking */
+    marpaESLIFRecognizerOption.bufsizl           = 0;  /* Recommended value */
+    marpaESLIFRecognizerOption.buftriggerperci   = 50; /* Recommended value */
+    marpaESLIFRecognizerOption.bufaddperci       = 50; /* Recommended value */
+    marpaESLIFRecognizerp = marpaESLIFRecognizer_newp(marpaESLIFGrammarp, &marpaESLIFRecognizerOption);
+    if (marpaESLIFRecognizerp == NULL) {
+      exit(1);
+    }
+  
+    if (fgets(inputs, sizeof(inputs), stdin) == NULL) {
+      perror("fgets");
+      exit(1);
+    }
+  
+    reader_context.inputs = inputs;
+    reader_context.inputl = strlen(inputs);
+    if (! marpaESLIFRecognizer_scanb(marpaESLIFRecognizerp,
+                                     0 /* initialEventsb */,
+                                     NULL /* continuebp*/,
+                                     NULL /* exhaustedbp */)) {
+      exit(1);
+    }
+  
+    value_context.genericLoggerp                 = genericLoggerp;
+    marpaESLIFValueOption.userDatavp             = &value_context;
+    marpaESLIFValueOption.ruleActionResolverp    = ruleActionResolverp;
+    marpaESLIFValueOption.symbolActionResolverp  = NULL; /* No symbol action resolver... Okay we use the default */
+    marpaESLIFValueOption.importerp              = importb;
+    marpaESLIFValueOption.highRankOnlyb          = 1;    /* Recommended value */
+    marpaESLIFValueOption.orderByRankb           = 1;    /* Recommended value */
+    marpaESLIFValueOption.ambiguousb             = 0;    /* Recommended value */
+    marpaESLIFValueOption.nullb                  = 0;    /* Recommended value */
+    marpaESLIFValueOption.maxParsesi             = 0;    /* Get all parse tree values - meaningless because ambiguousb is false */
+    marpaESLIFValuep = marpaESLIFValue_newp(marpaESLIFRecognizerp, &marpaESLIFValueOption);
+    if (marpaESLIFValuep == NULL) {
+      exit(1);
+    }
+    if (! marpaESLIFValue_valueb(marpaESLIFValuep)) {
+      exit(1);
+    }
+    if (! marpaESLIFRecognizer_last_completedb(marpaESLIFRecognizerp, "Expression", &offsetp, &lengthl)) {
+      fprintf(stderr, "marpaESLIFRecognizer_last_completedb failure!\n");
+      exit(1);
+    }
+  
+    expressions = (char *) malloc(lengthl + 1);
+    memcpy(expressions, inputs + (size_t) offsetp, lengthl);
+    expressions[lengthl] = '\0';
+  
+    switch (value_context.typei) {
+    case INTEGER_CONTEXT:
+      fprintf(stdout, "%s = %d\n", expressions, value_context.u.i);
+      break;
+    case DOUBLE_CONTEXT:
+      fprintf(stdout, "%s = %f\n", expressions, value_context.u.d);
+      break;
+    default:
+      fprintf(stdout, "Result is of unexpected typei %d!\n", value_context.typei);
+      exit(1);
+    }
+    free(expressions);
+  
+    marpaESLIFRecognizer_freev(marpaESLIFRecognizerp);
+    marpaESLIFGrammar_freev(marpaESLIFGrammarp);
+    marpaESLIF_freev(marpaESLIFp);
+    GENERICLOGGER_FREE(genericLoggerp);
+  
+    exit(0);
+  }
+  
+  /*****************************************************************************/
+  static short inputReaderb(void *userDatavp, char **inputsp, size_t *inputlp, short *eofbp, short *characterStreambp, char **encodingsp, size_t *encodinglp)
+  /*****************************************************************************/
+  {
+    reader_context_t *reader_contextp = (reader_context_t *) userDatavp;
+    
+    *inputsp           = reader_contextp->inputs;
+    *inputlp           = reader_contextp->inputl;
+    *eofbp             = 1;    /* One chunk */
+    *characterStreambp = 1;    /* We say this is a stream of characters */
+    *encodingsp        = NULL;
+    *encodinglp        = 0;
+  
+    return 1;
+  }
+  
+  /*****************************************************************************/
+  static short do_int(void *userDatavp, marpaESLIFValue_t *marpaESLIFValuep, int arg0i, int argni, int resulti, short nullableb)
+  /*****************************************************************************/
+  {
+    /* /[\d]+/  action => do_int */
+    marpaESLIFValueResult_t *marpaESLIFValueResultp;
+    marpaESLIFValueResult_t  marpaESLIFValueResult;
+    int                      i;
+  
+    if (nullableb) {
+      fprintf(stderr, "Nullable is impossible here!\n");
+      return 0;
+    }
+  
+    marpaESLIFValueResultp = marpaESLIFValue_stack_getp(marpaESLIFValuep, arg0i);
+    if (marpaESLIFValueResultp == NULL) {
+      fprintf(stderr, "marpaESLIFValue_stack_getp failure!\n");
+      return 0;
+    }
+    if (marpaESLIFValueResultp->type != MARPAESLIF_VALUE_TYPE_ARRAY) {
+      fprintf(stderr, "marpaESLIFValueResultp->type is not ARRAY but %d!\n", marpaESLIFValueResultp->type);
+      return 0;
+    }
+  
+    i = atoi((char *) marpaESLIFValueResultp->u.a.p);
+  
+    marpaESLIFValueResult.contextp        = &intContext;               /* Anything but NULL */
+    marpaESLIFValueResult.representationp = NULL;                      /* No representation */
+    marpaESLIFValueResult.type            = MARPAESLIF_VALUE_TYPE_INT; /* Integer type */
+    marpaESLIFValueResult.u.i             = i;                         /* Integer value */
+  
+    return marpaESLIFValue_stack_setb(marpaESLIFValuep, resulti, &marpaESLIFValueResult);
+  }
+  
+  /*****************************************************************************/
+  static short do_op(void *userDatavp, marpaESLIFValue_t *marpaESLIFValuep, int arg0i, int argni, int resulti, short nullableb)
+  /*****************************************************************************/
+  {
+    /* Expression OPERATOR Expression */
+    marpaESLIFValueResult_t *marpaESLIFValueResultpp[3];
+    marpaESLIFValueResult_t marpaESLIFValueResult;
+    int     j;
+    int     i[2];
+    double  d[2];
+    short   intb[2];
+    short   doubleb[2];
+    char   *ops;
+    int     valuei;
+    double  valued;
+    short   resultIsIntb;
+  
+    if (nullableb) {
+      fprintf(stderr, "Nullable is impossible here!\n");
+      return 0;
+    }
+  
+    marpaESLIFValueResultpp[0] = marpaESLIFValue_stack_getp(marpaESLIFValuep, arg0i);
+    if (marpaESLIFValueResultpp[0] == NULL) {
+      fprintf(stderr, "marpaESLIFValue_stack_getp failure!\n");
+      return 0;
+    }
+    marpaESLIFValueResultpp[1] = marpaESLIFValue_stack_getp(marpaESLIFValuep, argni);
+    if (marpaESLIFValueResultpp[0] == NULL) {
+      fprintf(stderr, "marpaESLIFValue_stack_getp failure!\n");
+      return 0;
+    }
+  
+    intb[0] = (marpaESLIFValueResultpp[0]->contextp == &intContext);
+    intb[1] = (marpaESLIFValueResultpp[1]->contextp == &intContext);
+  
+    doubleb[0] = (marpaESLIFValueResultpp[0]->contextp == &doubleContext);
+    doubleb[1] = (marpaESLIFValueResultpp[1]->contextp == &doubleContext);
+  
+    for (j = 0; j < 2; j++) {
+      if ((! intb[j]) && (! doubleb[j])) {
+        fprintf(stderr, "Expression No %d is neither an int or a double (got %p and %p, intContext is %p and doubleContext is %p)!\n", j, marpaESLIFValueResultpp[0]->contextp, marpaESLIFValueResultpp[1]->contextp, &intContext, &doubleContext);
+        return 0;
+      }
+      /* Get values */
+      if (intb[j]) {
+        i[j] = marpaESLIFValueResultpp[j]->u.i;
+        /* fprintf(stderr, "<== %d\n", i[j]); */
+      } else {
+        d[j] = marpaESLIFValueResultpp[j]->u.d;
+        /* fprintf(stderr, "<== %f\n", d[j]); */
+      }
+    }
+  
+    /* By definition OPERATOR is a lexeme, i.e. an ARRAY */
+    marpaESLIFValueResultpp[2] = marpaESLIFValue_stack_getp(marpaESLIFValuep, arg0i + 1);
+    if (marpaESLIFValueResultpp[2] == NULL) {
+      fprintf(stderr, "marpaESLIFValue_stack_getp failure!\n");
+      return 0;
+    }
+    ops = (char *) marpaESLIFValueResultpp[2]->u.a.p;
+    /* For convenience, marpaESLIF is ALWAYS putting a NUL character after every lexeme buffer. */
+    
+    if (strcmp(ops, "**") == 0) {
+      /* Both are int ? */
+      if (intb[0] && intb[1]) {
+        valued = pow((double) i[0], (double) i[1]);
+      } else {
+        valued = pow((intb[0] ? (double) i[0] : d[0]), (intb[1] ? (double) i[1] : d[1]));
+      }
+      resultIsIntb = 0;
+    } else if (strcmp(ops, "*") == 0) {
+      /* Both are int ? */
+      if (intb[0] && intb[1]) {
+        valuei = i[0] * i[1];
+        resultIsIntb = 1;
+      } else {
+        valued = (intb[0] ? (double) i[0] : d[0]) * (intb[1] ? (double) i[1] : d[1]);
+        resultIsIntb = 0;
+      }
+    } else if (strcmp(ops, "/") == 0) {
+      /* Both are int ? */
+      if (intb[0] && intb[1]) {
+        if (intb[1] == 0) {
+          fprintf(stderr, "Division by zero!\n");
+          return 0;
+        }
+        valued = (double) i[0] / (double) i[1];
+      } else {
+        if ((intb[1] ? (double) i[1] : d[1]) < 0.E-8) {
+          fprintf(stderr, "Division by zero (well, value is < 10E-8) !\n");
+          return 0;
+        }
+        valued = (intb[0] ? (double) i[0] : d[0]) / (intb[1] ? (double) i[1] : d[1]);
+      }
+      resultIsIntb = 0;
+    } else if (strcmp(ops, "+") == 0) {
+      /* Both are int ? */
+      if (intb[0] && intb[1]) {
+        valuei = i[0] + i[1];
+        resultIsIntb = 1;
+      } else {
+        valued = (intb[0] ? (double) i[0] : d[0]) + (intb[1] ? (double) i[1] : d[1]);
+        resultIsIntb = 0;
+      }
+    } else if (strcmp(ops, "-") == 0) {
+      /* Both are int ? */
+      if (intb[0] && intb[1]) {
+        valuei = i[0] - i[1];
+        resultIsIntb = 1;
+      } else {
+        valued = (intb[0] ? (double) i[0] : d[0]) - (intb[1] ? (double) i[1] : d[1]);
+        resultIsIntb = 0;
+      }
+    } else {
+      fprintf(stderr, "Unknown operator %s!\n", ops);
+      return 0;
+    }
+  
+    if (resultIsIntb) {
+      marpaESLIFValueResult.contextp        = &intContext;                  /* Anything but NULL */
+      marpaESLIFValueResult.representationp = NULL;                         /* No representation */
+      marpaESLIFValueResult.type            = MARPAESLIF_VALUE_TYPE_INT;    /* Integer type */
+      marpaESLIFValueResult.u.i             = valuei;                       /* Integer value */
+      /* fprintf(stderr, "==> %d\n", valuei); */
+    } else {
+      marpaESLIFValueResult.contextp        = &doubleContext;               /* Anything but 0 */
+      marpaESLIFValueResult.representationp = NULL;                         /* No representation */
+      marpaESLIFValueResult.type            = MARPAESLIF_VALUE_TYPE_DOUBLE; /* Double type */
+      marpaESLIFValueResult.u.d             = valued;                       /* Double value */
+      /* fprintf(stderr, "==> %f\n", valued); */
+    }
+    
+    return marpaESLIFValue_stack_setb(marpaESLIFValuep, resulti, &marpaESLIFValueResult);
+  }
+  
+  /*****************************************************************************/
+  static marpaESLIFValueRuleCallback_t ruleActionResolverp(void *userDatavp, marpaESLIFValue_t *marpaESLIFValuep, char *actions)
+  /*****************************************************************************/
+  {
+    if (strcmp(actions, "do_int") == 0) {
+      return do_int;
+    } else if (strcmp(actions, "do_op") == 0) {
+      return do_op;
+    } else {
+      fprintf(stderr, "Unknown action %s!\n", actions);
+      return NULL;
+    }
+  }
+  
+  /*****************************************************************************/
+  short importb(marpaESLIFValue_t *marpaESLIFValuep, void *userDatavp, marpaESLIFValueResult_t *marpaESLIFValueResultp)
+  /*****************************************************************************/
+  {
+    value_context_t *value_contextp = (value_context_t *) userDatavp;
+    short            rcb;
+  
+    switch (marpaESLIFValueResultp->type) {
+    case MARPAESLIF_VALUE_TYPE_INT:
+      value_contextp->typei = INTEGER_CONTEXT;
+      value_contextp->u.i   = marpaESLIFValueResultp->u.i;
+      rcb = 1;
+      break;
+    case MARPAESLIF_VALUE_TYPE_DOUBLE:
+      value_contextp->typei = DOUBLE_CONTEXT;
+      value_contextp->u.d   = marpaESLIFValueResultp->u.d;
+      rcb = 1;
+      break;
+    default:
+      GENERICLOGGER_ERRORF(value_contextp->genericLoggerp, "Unsupported type %d\n", marpaESLIFValueResultp->type);
+      rcb = 0;
+      break;
+    }
+  
+    return rcb;
+  }
+
+=head2 TESTS
+
+Well, you can check:
+
+  echo "5 / (2 * 3)" | /path/to/your/calculator
+  5 / (2 * 3) = 0.833333
+  
+  echo "5 / 2 * 3" | /path/to/your/calculator
+  5 / 2 * 3 = 7.500000
+  
+  echo "(5 ** 2) ** 3" | /path/to/your/calculator
+  (5 ** 2) ** 3 = 15625.000000
+  
+  echo "5 * (2 * 3)" | /path/to/your/calculator
+  5 * (2 * 3) = 30
+  
+  echo "5 ** (2 ** 3)" | /path/to/your/calculator
+  5 ** (2 ** 3) = 390625.000000
+  
+  echo "5 ** (2 / 3)" | /path/to/your/calculator
+  5 ** (2 / 3) = 2.924018
+  
+  echo "1 + ( 2 + ( 3 + ( 4 + 5) )" | /path/to/your/calculator
+  ERROR MARPA_ERR_NO_PARSE: No parse
+  
+  echo "1 + ( 2 + ( 3 + ( 4 + 5) ) )" | /path/to/your/calculator
+  1 + ( 2 + ( 3 + ( 4 + 5) ) ) = 15
+
+=head1 NOTES
+
+This example is a copy/paste from L<Marpa::R2's Semantics|https://metacpan.org/pod/distribution/Marpa-R2/pod/Semantics.pod> documentation.
+
+=head1 SEE ALSO
+
+L<marpaESLIF|https://github.com/jddurand/c-marpaESLIF>
