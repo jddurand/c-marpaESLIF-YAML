@@ -23,7 +23,9 @@ MYPACKAGETESTEXECUTABLE(marpaESLIFYAMLTester       test/marpaESLIF_YAML_Tester.c
 ################
 # Dependencies #
 ################
-MYPACKAGEDEPENDENCY (marpaESLIF    "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/github/marpaESLIF"    LIBS LOCAL)
+MYPACKAGEDEPENDENCY (marpaESLIF    "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/github/marpaESLIF"   LIBS LOCAL)
+MYPACKAGEDEPENDENCY (genericStack  "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/github/genericStack" LIBS LOCAL)
+MYPACKAGEDEPENDENCY (genericHash   "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/github/genericHash"  LIBS LOCAL)
 
 #########
 # Tests #
